@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hand Magic AI - JARVIS</title>
+<script src="https://cdn.auth0.com/js/auth0-spa-js/2.0/auth0-spa-js.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<style>
+body{margin:0;background:#000;color:#fff;font-family:Arial;overflow:hidden}
+#galaxy{position:fixed;inset:0;background:radial-gradient(circle at 50% 50%, #1a0033, #000);z-index:0}
+#canvas{position:fixed;inset:0;z-index:1}
+#ui{position:fixed;top:20px;left:20px;z-index:10}
+button{padding:12px 20px;border:none;border-radius:20px;background:#6a00ff;color:#fff;font-weight:bold;cursor:pointer;margin:5px}
+#voiceBtn{background:#ff0055}
+#status{margin-top:10px;font-size:14px;color:#00ffcc}
+#auth{position:fixed;top:20px;right:20px;z-index:20;text-align:right}
+video{position:fixed;bottom:10px;right:10px;width:180px;border-radius:15px;border:2px solid #6a00ff;z-index:5}
+</style>
+</head>
+<body>
+<div id="galaxy"></div>
+<canvas id="canvas"></canvas>
+<div id="ui">
+<h1>✨ Hand Magic AI <span style="color:#00ffcc">JARVIS</span></h1>
+<p>Haath se Galaxy control karo, Awaz se order do</p>
+<button onclick="startCamera()">🎥 Camera On</button>
+<button id="voiceBtn" onclick="startVoice()">🎤 Voice On - Bolo "Fire" / "Galaxy"</button>
+<div id="status">Login karo phir magic start hoga</div>
+</div>
+<div id="auth">
+<button id="login" onclick="login()">Login</button>
+<button id="logout" onclick="logout()" style="display:none">Logout</button>
+<div id="user"></div>
+</div>
+<video id="video" autoplay playsinline muted></video>
+<script>
+const AUTH_DOMAIN = "dev-4bumbstmp0tl311.us.auth0.com";
+const AUTH_CLIENT = "pazVA4KEzP8Idoak9HkUOCDLmdhbNhAk";
+let auth0Client = null;
+async function initAuth(){
+  auth0Client = await auth0.createAuth0Client({domain:AUTH_DOMAIN, clientId:AUTH_CLIENT, authorizationParams:{redirect_uri: window.location.origin}});
+  if(location.search.includes("code=")){
+    await auth0Client.handleRedirectCallback();
+    history.replaceState({}, "", "/");
+  }
+  const isAuth = await auth0Client.isAuthenticated();
+  if(isAuth){
+    document.getElementById("login").style.display="none";
+    document.getElementById("logout").style.display="inline-block";
+    const user = await auth0Client.getUser();
+    document.getElementById("user").innerHTML = "Welcome, " + user.name + "<br>" + user.email;
+    document.getElementById("status").innerText = "Welcome " + user.name + "! Ab haath hilao ya bolo";
+  }
+}
+function login(){ auth0Client.loginWithRedirect(); }
+function logout(){ auth0Client.logout({logoutParams:{returnTo: window.location.origin}}); }
+initAuth();
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+canvas.width = innerWidth; canvas.height = innerHeight;
+let particles = [];
+for(let i=0;i<300;i++) particles.push({x:Math.random()*canvas.width, y:Math.random()*canvas.height, r:Math.random()*3+1, c:["#ff00ff","#00ffff","#ffff00","#ff0055"][Math.floor(Math.random()*4)]});
+function drawGalaxy(fx=0, fy=0){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  particles.forEach(p=>{
+    ctx.beginPath(); ctx.arc(p.x+fx, p.y+fy, p.r, 0, Math.PI*2); ctx.fillStyle=p.c; ctx.fill();
+  });
+}
+drawGalaxy();
+let fireMode=false;
+function toggleFire(){
+  fireMode =!fireMode;
+  document.getElementById("galaxy").style.background = fireMode? "radial-gradient(circle, #ff3300, #000)" : "radial-gradient(circle at 50% 50%, #1a0033, #000)";
+  speak(fireMode? "Fire mode activated sir" : "Galaxy mode on");
+}
+async function startCamera(){
+  const video = document.getElementById("video");
+  const hands = new Hands({locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  hands.setOptions({maxNumHands:1, modelComplexity:0, minDetectionConfidence:0.5, minTrackingConfidence:0.5});
+  hands.onResults((res)=>{
+    if(res.multiHandLandmarks && res.multiHandLandmarks[0]){
+      const lm = res.multiHandLandmarks[0][8];
+      let fx = (lm.x-0.5)*100;
+      let fy = (lm.y-0.5)*100;
+      drawGalaxy(fx, fy);
+      document.getElementById("status").innerText = "Hand Tracking: ON - Haath hila rahe ho";
+    }
+  });
+  const cam = new Camera(video,{onFrame:async()=>{await hands.send({image:video})}, width:640, height:480});
+  cam.start();
+}
+function speak(text){
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US";
+  speechSynthesis.speak(u);
+}
+function startVoice(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ alert("Browser voice support nahi karta, Chrome use karo"); return; }
+  const rec = new SR();
+  rec.lang = "en-US";
+  rec.continuous = true;
+  rec.interimResults = false;
+  rec.onresult = (e)=>{
+    let cmd = e.results[e.results.length-1][0].transcript.toLowerCase();
+    document.getElementById("status").innerText = "Tumne bola: " + cmd;
+    if(cmd.includes("fire")) toggleFire();
+    else if(cmd.includes("galaxy")){ fireMode=false; document.getElementById("galaxy").style.background="radial-gradient(circle at 50% 50%, #1a0033, #000)"; speak("Galaxy mode on"); }
+    else if(cmd.includes("youtube")){ speak("Opening YouTube"); window.open("https://youtube.com"); }
+    else if(cmd.includes("hello") || cmd.includes("jarvis")) speak("Yes sir, I am ready. Aapka Hand Magic AI ready hai");
+  };
+  rec.start();
+  speak("Voice activated. I am listening sir");
+  document.getElementById("status").innerText = "Voice ON - Bolo: Fire, Galaxy, YouTube, Hello Jarvis";
+}
+</script>
+</body>
+</html>
